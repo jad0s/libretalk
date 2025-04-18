@@ -73,15 +73,11 @@ func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 					conn.WriteJSON(map[string]string{"type": "register", "status": "ok"})
 				}
 			case "login":
-				if err := auth.Login(db, req.Username, req.Password); err != nil {
+				token, err := auth.Login(db, req.Username, req.Password)
+				if err != nil {
 					conn.WriteJSON(map[string]string{"type": "error", "msg": err.Error()})
 				} else {
-					token, err := auth.GenerateToken(req.Username)
-					if err != nil {
-						conn.WriteJSON(map[string]string{"type": "error", "msg": "token error"})
-					} else {
-						conn.WriteJSON(map[string]string{"type": "login", "status": "ok", "token": token})
-					}
+					conn.WriteJSON(map[string]string{"type": "login", "status": "ok", "token": token})
 				}
 			default:
 				conn.WriteJSON(map[string]string{"type": "error", "msg": "unknown action"})

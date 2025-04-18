@@ -22,18 +22,19 @@ func Register(db *sql.DB, username, password string) error {
 }
 
 // Login verifies a username/password against the DB.
-func Login(db *sql.DB, username, password string) error {
+func Login(db *sql.DB, username, password string) (string, error) {
 	var hash string
 	query := "SELECT password_hash FROM users WHERE username = ?"
 	if err := db.QueryRow(query, username).Scan(&hash); err != nil {
 		if err == sql.ErrNoRows {
-			return fmt.Errorf("user not found")
+			return "", fmt.Errorf("user not found")
 		}
-		return fmt.Errorf("query user: %w", err)
+		return "", fmt.Errorf("query user: %w", err)
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err != nil {
-		return fmt.Errorf("invalid password")
+		return "", fmt.Errorf("invalid password")
 	}
 	log.Printf("user %q logged in", username)
-	return nil
+
+	return GenerateToken(username)
 }
