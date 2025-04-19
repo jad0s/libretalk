@@ -15,12 +15,13 @@ import (
 
 func main() {
 	fmt.Print("Enter DB password: ")
+	//reads password without showing it in terminal
 	pw, err := term.ReadPassword(int(os.Stdin.Fd()))
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println()
-
+	//database connection --TODO - change db IP and PORT to silent input like db password for prod
 	dsn := fmt.Sprintf("server:%s@tcp(chatdb.s:3306)/selfchat",
 		strings.TrimSpace(string(pw)),
 	)
