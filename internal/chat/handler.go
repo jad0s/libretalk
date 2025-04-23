@@ -20,11 +20,20 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
+// ActionRequest handles register/login actions
 type ActionRequest struct {
 	Type     string `json:"type"`
 	Action   string `json:"action"`
 	Username string `json:"username"`
 	Password string `json:"password"`
+}
+
+// HistoryRequest handles fetching message history
+type HistoryRequest struct {
+	Type     string `json:"type"`
+	ChatWith string `json:"chatWith"`
+	Token    string `json:"token"`
+	Limit    int    `json:"limit"`
 }
 
 // Handler is the WebSocket entrypoint for chat.
@@ -72,7 +81,6 @@ func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 				conn.WriteJSON(map[string]string{"type": "error", "msg": "bad action"})
 				continue
 			}
-
 			switch req.Action {
 			case "register":
 				if err := auth.Register(db, req.Username, req.Password); err != nil {
@@ -80,7 +88,6 @@ func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 				} else {
 					conn.WriteJSON(map[string]string{"type": "register", "status": "ok"})
 				}
-
 			case "login":
 				// 1) authenticate + get token
 				token, err := auth.Login(db, req.Username, req.Password)
@@ -102,12 +109,11 @@ func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 				}
 				connections[req.Username] = append(connections[req.Username], ci)
 				// 4) replay undelivered messages
-				rows, err := store.LoadUndelivered(db, req.Username)
+				undelivered, err := store.LoadUndelivered(db, req.Username)
 				if err != nil {
 					log.Println("LoadUndelivered:", err)
 				}
-				for _, row := range rows {
-					// wrap each MessageRow into your WS payload
+				for _, row := range undelivered {
 					conn.WriteJSON(types.IncomingMessage{
 						Type:        "message",
 						From:        row.Sender,
@@ -116,7 +122,6 @@ func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 						Content:     row.Content,
 					})
 				}
-
 			default:
 				conn.WriteJSON(map[string]string{"type": "error", "msg": "unknown action"})
 			}
@@ -156,6 +161,36 @@ func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 			// 6) mark delivered
 			if err := store.MarkDelivered(db, msgID); err != nil {
 				log.Println("MarkDelivered:", err)
+			}
+
+		// ─── HISTORY REQUEST ───────────────────────────────────────────────────────
+		case "history":
+			var req HistoryRequest
+			if err := json.Unmarshal(rawMsg, &req); err != nil {
+				conn.WriteJSON(map[string]string{"type": "error", "msg": "bad history request"})
+				continue
+			}
+			// authenticate
+			user, err := auth.ParseToken(req.Token)
+			if err != nil {
+				conn.WriteJSON(map[string]string{"type": "error", "msg": "invalid token"})
+				continue
+			}
+			// load last N messages
+			rows, err := store.LoadHistory(db, user, req.ChatWith, req.Limit)
+			if err != nil {
+				log.Println("LoadHistory:", err)
+				continue
+			}
+			// send each back
+			for _, row := range rows {
+				conn.WriteJSON(types.IncomingMessage{
+					Type:        "message",
+					From:        row.Sender,
+					To:          row.Recipient,
+					ContentType: row.ContentType,
+					Content:     row.Content,
+				})
 			}
 
 		// ─── UNKNOWN TYPE ─────────────────────────────────────────────────────────

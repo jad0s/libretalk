@@ -90,3 +90,56 @@ func LoadUndelivered(db *sql.DB, username string) ([]MessageRow, error) {
 
 	return msgs, nil
 }
+
+// LoadHistory fetches the most recent `limit` messages exchanged
+// between `user` and `withUser`, in chronological order (oldest first).
+func LoadHistory(db *sql.DB, user, withUser string, limit int) ([]MessageRow, error) {
+	// Query newest first, limited
+	rows, err := db.Query(`
+        SELECT id, sender, recipient, content_type, content, sent_at
+          FROM messages
+         WHERE (sender = ? AND recipient = ?)
+            OR (sender = ? AND recipient = ?)
+         ORDER BY sent_at DESC
+         LIMIT ?`,
+		user, withUser,
+		withUser, user,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load history: %w", err)
+	}
+	defer rows.Close()
+
+	var msgs []MessageRow
+	for rows.Next() {
+		var m MessageRow
+		var rawTime []byte // placeholder for the DATETIME column
+		if err := rows.Scan(
+			&m.ID,
+			&m.Sender,
+			&m.Recipient,
+			&m.ContentType,
+			&m.Content,
+			&rawTime,
+		); err != nil {
+			return nil, fmt.Errorf("scan history row: %w", err)
+		}
+
+		// MySQL DATETIME comes back as "YYYY-MM-DD HH:MM:SS"
+		t, err := time.Parse("2006-01-02 15:04:05", string(rawTime))
+		if err != nil {
+			return nil, fmt.Errorf("parse sent_at: %w", err)
+		}
+		m.SentAt = t
+
+		msgs = append(msgs, m)
+	}
+
+	// Reverse so oldest are first
+	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
+		msgs[i], msgs[j] = msgs[j], msgs[i]
+	}
+
+	return msgs, nil
+}
