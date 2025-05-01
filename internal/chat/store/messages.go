@@ -17,7 +17,7 @@ type MessageRow struct {
 	SentAt      time.Time
 }
 
-// SaveMessage writes a new message and returns its auto-increment ID.
+// SaveMessage writes a new message to db and returns its auto-increment ID.
 func SaveMessage(db *sql.DB, sender, recipient, contentType, content string) (int64, error) {
 	res, err := db.Exec(`
 		INSERT INTO messages (sender, recipient, content_type, content)
