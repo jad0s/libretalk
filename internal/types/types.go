@@ -6,7 +6,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// IncomingMessage is the payload shape for your WebSocket chat messages.
 type IncomingMessage struct {
 	Type        string `json:"type"`
 	From        string `json:"from"`

@@ -15,7 +15,7 @@ import (
 )
 
 // uploadHandler handles multipart uploads under the field name "file"
-// and writes metadata into your `files` table.
+// and writes metadata into "files" table in db
 func UploadHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 1) Limit size (optional)
