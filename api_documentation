@@ -1,0 +1,179 @@
+LIBRETALK SERVER API DOCUMENTATION
+
+Base URLs
+---------
+WebSocket: ws://<SERVER_HOST>:<PORT>/ws
+  - default port: 8081 (configurable)
+File Upload: POST http://<SERVER_HOST>:<PORT>/upload
+  - multipart/form-data (see “File Upload” below)
+
+All non-upload payloads are JSON with camelCase field names.
+
+1. WebSocket Messages
+---------------------
+
+Every WS frame is a JSON object with a top-level "type" field. Valid types:
+
+1.1 action — Login & Registration
+  Client → Server:
+    {
+      "type": "action",
+      "action": "login",       // or "register"
+      "username": "alice",
+      "password": "hunter2"
+    }
+
+  Server → Client:
+    • On error:
+      { "type": "error", "message": "<description>" }
+
+    • On successful register:
+      { "type": "register", "status": "ok" }
+
+    • On successful login (two messages):
+      1) { "type": "login", "status": "ok", "token": "<JWT>" }
+      2) Zero or more undelivered messages (see “message” below)
+
+1.2 ping / pong — Heartbeat
+  Client → Server:
+    { "type": "ping" }
+  Server → Client:
+    { "type": "pong" }
+  (Optionally, server may also send “ping” → client “pong”)
+
+1.3 message — Chat messages
+  Client → Server:
+    {
+      "type": "message",
+      "to": "bob",
+      "contentType": "text",      // or "file"
+      "content": "Hello, Bob!",   // or filename/URL if file
+      "token": "<JWT>"
+    }
+
+  Server → Client (broadcast to each recipient):
+    {
+      "type": "message",
+      "from": "alice",
+      "to":   "bob",
+      "contentType": "text",      // or "file"
+      "content":     "Hello, Bob!"
+    }
+
+  • On validation failure:
+    { "type": "error", "message": "<description>" }
+
+1.4 history — Fetch recent messages
+  Client → Server:
+    {
+      "type": "history",
+      "chatWith": "bob",
+      "limit": 30,
+      "token": "<JWT>"
+    }
+
+  Server → Client:
+    • On error:
+      { "type": "error", "message": "<description>" }
+
+    • On success: up to `limit` messages as per “message” above
+
+2. File Upload (images, video, etc.)
+------------------------------------
+Endpoint: POST /upload  
+Headers:
+  Authorization: Bearer <JWT>
+  Content-Type: multipart/form-data; boundary=---
+
+Body (example):
+  --boundary
+  Content-Disposition: form-data; name="file"; filename="pic.png"
+  Content-Type: image/png
+
+  <binary data>
+  --boundary--
+
+Response (JSON, on success):
+  {
+    "id":         "uuid-v4-string",
+    "url":        "/uploads/uuid-v4-string.png",
+    "filename":   "pic.png",
+    "contentType":"image/png",
+    "sizeBytes":  123456
+  }
+
+after a succesful upload, a WS message needs to be sent with this format:
+
+{
+  "type": "message",
+  "from": "alice",
+  "to": "bob",
+  "contentType": "file",
+  "content": "<url>", // received after succesful upload in "url" field, see Response above
+  "token": "<jwt_token>"
+}
+
+
+Errors use HTTP 4xx/5xx with a JSON or plaintext body.
+
+3. Authentication & Security
+----------------------------
+• JWT issued on login, sent in:
+    – WS “message” requests (field `token`)
+    – HTTP uploads via `Authorization` header  
+• Tokens expire after 24 h by default  
+• For long sessions consider refresh-token or sliding-expiry flows  
+• WS errors are JSON `{ "type":"error", "message":"…" }`; HTTP uses status codes
+
+4. Extensibility
+----------------
+• Rate-limiting or throttling info  
+• Group chat: use a `groupId` instead of single `to`  
+• Typing indicators: `type: "typing"` with `to` and `status`  
+• Presence: `type: "presence"` with `online: true|false`
+
+5. Go Structs (in internal/types/types.go)
+------------------------------------------
+```go
+package types
+
+type ActionRequest struct {
+  Type     string `json:"type"`     // "action"
+  Action   string `json:"action"`   // "login" or "register"
+  Username string `json:"username"`
+  Password string `json:"password"`
+}
+
+type LoginResponse struct {
+  Type   string `json:"type"`   // "login"
+  Status string `json:"status"` // "ok"
+  Token  string `json:"token"`
+}
+
+type IncomingMessage struct {
+  Type        string `json:"type"`        // "message"
+  From        string `json:"from"`
+  To          string `json:"to"`
+  ContentType string `json:"contentType"` // "text" or "file"
+  Content     string `json:"content"`     // text or URL
+}
+
+type OutgoingMessage struct {
+  Type        string `json:"type"`        // "message"
+  To          string `json:"to"`
+  ContentType string `json:"contentType"` // "text" or "file"
+  Content     string `json:"content"`
+  Token       string `json:"token"`
+}
+
+type HistoryRequest struct {
+  Type     string `json:"type"`     // "history"
+  ChatWith string `json:"chatWith"`
+  Limit    int    `json:"limit"`
+  Token    string `json:"token"`
+}
+
+type ErrorResponse struct {
+  Type    string `json:"type"`    // "error"
+  Message string `json:"message"`
+}

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>LibreTalk Server API Documentation</title>
+  <style>
+    body { font-family: sans-serif; max-width: 800px; margin: auto; line-height: 1.6; }
+    code { background: #f4f4f4; padding: 2px 4px; }
+    pre { background: #f4f4f4; padding: 8px; overflow: auto; }
+    h1, h2, h3 { margin-top: 1.2em; }
+    hr { margin: 2em 0; }
+  </style>
+</head>
+<body>
+
+<h1>LibreTalk Server API Documentation</h1>
+
+<h2>Base URLs</h2>
+<ul>
+  <li><strong>WebSocket</strong>: <code>ws://&lt;SERVER_HOST&gt;:&lt;PORT&gt;/ws</code><br>
+      Default port: <code>8081</code> (configurable)</li>
+  <li><strong>File Upload</strong>: <code>POST http://&lt;SERVER_HOST&gt;:&lt;PORT&gt;/upload</code><br>
+      multipart/form-data</li>
+</ul>
+<p>All non-upload payloads are JSON with <strong>camelCase</strong> field names.</p>
+
+<hr>
+
+<h2>1. WebSocket Messages</h2>
+<p>Every WS frame is a JSON object with a top-level <code>type</code> field. Valid types:</p>
+
+<h3>1.1 <code>action</code> — Login &amp; Registration</h3>
+<pre><code>// ActionRequest (Client → Server)
+{
+  "type": "action",
+  "action": "login",       // or "register"
+  "username": "alice",
+  "password": "hunter2"
+}
+</code></pre>
+<p><strong>Server → Client</strong>:</p>
+<ul>
+  <li><strong>On error:</strong>
+    <pre><code>{ "type": "error", "message": "&lt;description&gt;" }</code></pre>
+  </li>
+  <li><strong>On register success:</strong>
+    <pre><code>{ "type": "register", "status": "ok" }</code></pre>
+  </li>
+  <li><strong>On login success (two messages):</strong>
+    <pre><code>{
+  "type": "login",
+  "status": "ok",
+  "token": "&lt;JWT&gt;"
+}
+{ /* undelivered messages follow */ }</code></pre>
+  </li>
+</ul>
+
+<h3>1.2 <code>ping</code> / <code>pong</code> — Heartbeat</h3>
+<pre><code>Client → Server: { "type": "ping" }
+Server → Client: { "type": "pong" }
+</code></pre>
+
+<h3>1.3 <code>message</code> — Chat Messages</h3>
+<pre><code>// Outgoing (Client → Server)
+{
+  "type": "message",
+  "to": "bob",
+  "contentType": "text",    // or "file"
+  "content": "Hello, Bob!",
+  "token": "&lt;JWT&gt;"
+}
+
+// Incoming (Server → Client)
+{
+  "type": "message",
+  "from": "alice",
+  "to":   "bob",
+  "contentType": "text",
+  "content":     "Hello, Bob!"
+}
+</code></pre>
+<p>On validation failure:</p>
+<pre><code>{ "type": "error", "message": "&lt;description&gt;" }</code></pre>
+
+<h3>1.4 <code>history</code> — Fetch Recent Messages</h3>
+<pre><code>// Client → Server
+{
+  "type": "history",
+  "chatWith": "bob",
+  "limit": 30,
+  "token": "&lt;JWT&gt;"
+}
+
+// Server → Client on error:
+{ "type": "error", "message": "&lt;description&gt;" }
+
+// Server → Client on success:
+{ "type": "message", /* up to `limit` messages as above */ }
+</code></pre>
+
+<hr>
+
+<h2>2. File Upload (Images, Video, etc.)</h2>
+<p>Clients upload binary data via HTTP multipart/form-data POST to <code>/upload</code>:</p>
+<pre><code>POST /upload HTTP/1.1
+Host: &lt;SERVER_HOST&gt;:&lt;PORT&gt;
+Authorization: Bearer &lt;JWT&gt;
+Content-Type: multipart/form-data; boundary=---
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="pic.png"
+Content-Type: image/png
+
+&lt;binary data&gt;
+--boundary--</code></pre>
+<p>On success, returns JSON:</p>
+<pre><code>{
+  "id":         "uuid-v4-string",
+  "url":        "/uploads/uuid-v4-string.png",
+  "filename":   "pic.png",
+  "contentType":"image/png",
+  "sizeBytes":  123456
+}</code></pre>
+
+<p><strong>Note:</strong> After the file is successfully uploaded, the client <strong>must also send a WebSocket message</strong> to notify the recipient. This message should contain the file's URL returned by the server. Example:</p>
+
+<pre><code>{
+  "type": "message",
+  "from": "alice",
+  "to": "bob",
+  "contentType": "file",
+  "content": "/uploads/uuid-v4-string.png",
+  "token": "jwt_token"
+}</code></pre>
+
+<hr>
+
+<h2>3. Authentication &amp; Security</h2>
+<ul>
+  <li>JWT issued on login; clients present it in WS messages (<code>token</code>) and HTTP uploads (<code>Authorization</code>).</li>
+  <li>Access tokens expire after 24 h by default; consider refresh-token or sliding-expiry for long sessions.</li>
+  <li>WS errors use JSON; HTTP errors use appropriate status codes.</li>
+</ul>
+
+<hr>
+
+<h2>4. Extensibility</h2>
+<ul>
+  <li>Rate-limiting / throttling</li>
+  <li>Group chats via a <code>groupId</code> field</li>
+  <li>Typing indicators (<code>type: "typing"</code>)</li>
+  <li>Presence (<code>type: "presence"</code>)</li>
+</ul>
+
+<hr>
+
+<h2>5. Go Structs (<code>internal/types/types.go</code>)</h2>
+<pre><code>package types
+
+type ActionRequest struct {
+  Type     string `json:"type"`
+  Action   string `json:"action"`
+  Username string `json:"username"`
+  Password string `json:"password"`
+}
+
+type LoginResponse struct {
+  Type   string `json:"type"`
+  Status string `json:"status"`
+  Token  string `json:"token"`
+}
+
+type IncomingMessage struct {
+  Type        string `json:"type"`
+  From        string `json:"from"`
+  To          string `json:"to"`
+  ContentType string `json:"contentType"`
+  Content     string `json:"content"`
+}
+
+type OutgoingMessage struct {
+  Type        string `json:"type"`
+  To          string `json:"to"`
+  ContentType string `json:"contentType"`
+  Content     string `json:"content"`
+  Token       string `json:"token"`
+}
+
+type HistoryRequest struct {
+  Type     string `json:"type"`
+  ChatWith string `json:"chatWith"`
+  Limit    int    `json:"limit"`
+  Token    string `json:"token"`
+}
+
+type ErrorResponse struct {
+  Type    string `json:"type"`
+  Message string `json:"message"`
+}
+</code></pre>
+
+</body>
+</html>
