@@ -3,21 +3,12 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"libretalk/internal/types"
 	"strings"
 	"time"
 )
 
-// MessageRow mirrors your messages table.
-type MessageRow struct {
-	ID          int64
-	Sender      string
-	Recipient   string
-	ContentType string
-	Content     string
-	SentAt      time.Time
-}
-
-// SaveMessage writes a new message and returns its auto-increment ID.
+// SaveMessage writes a new message to db and returns its auto-increment ID.
 func SaveMessage(db *sql.DB, sender, recipient, contentType, content string) (int64, error) {
 	res, err := db.Exec(`
 		INSERT INTO messages (sender, recipient, content_type, content)
@@ -43,7 +34,7 @@ func MarkDelivered(db *sql.DB, msgID int64) error {
 
 // LoadUndelivered fetches all undelivered messages for a user,
 // in ascending sent_at order, and marks them delivered.
-func LoadUndelivered(db *sql.DB, username string) ([]MessageRow, error) {
+func LoadUndelivered(db *sql.DB, username string) ([]types.MessageRow, error) {
 	rows, err := db.Query(`
 		SELECT id, sender, recipient, content_type, content, sent_at
 		  FROM messages
@@ -56,10 +47,10 @@ func LoadUndelivered(db *sql.DB, username string) ([]MessageRow, error) {
 	}
 	defer rows.Close()
 
-	var msgs []MessageRow
+	var msgs []types.MessageRow
 	var ids []int64
 	for rows.Next() {
-		var m MessageRow
+		var m types.MessageRow
 		if err := rows.Scan(
 			&m.ID, &m.Sender, &m.Recipient,
 			&m.ContentType, &m.Content, &m.SentAt,
@@ -93,7 +84,7 @@ func LoadUndelivered(db *sql.DB, username string) ([]MessageRow, error) {
 
 // LoadHistory fetches the most recent `limit` messages exchanged
 // between `user` and `withUser`, in chronological order (oldest first).
-func LoadHistory(db *sql.DB, user, withUser string, limit int) ([]MessageRow, error) {
+func LoadHistory(db *sql.DB, user, withUser string, limit int) ([]types.MessageRow, error) {
 	// Query newest first, limited
 	rows, err := db.Query(`
         SELECT id, sender, recipient, content_type, content, sent_at
@@ -111,9 +102,9 @@ func LoadHistory(db *sql.DB, user, withUser string, limit int) ([]MessageRow, er
 	}
 	defer rows.Close()
 
-	var msgs []MessageRow
+	var msgs []types.MessageRow
 	for rows.Next() {
-		var m MessageRow
+		var m types.MessageRow
 		var rawTime []byte // placeholder for the DATETIME column
 		if err := rows.Scan(
 			&m.ID,

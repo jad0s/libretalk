@@ -20,22 +20,6 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-// ActionRequest handles register/login actions
-type ActionRequest struct {
-	Type     string `json:"type"`
-	Action   string `json:"action"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-// HistoryRequest handles fetching message history
-type HistoryRequest struct {
-	Type     string `json:"type"`
-	ChatWith string `json:"chatWith"`
-	Token    string `json:"token"`
-	Limit    int    `json:"limit"`
-}
-
 // Handler is the WebSocket entrypoint for chat.
 func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -44,7 +28,8 @@ func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		http.Error(w, "upgrade failed", http.StatusBadRequest)
 		return
 	}
-	// Cleanup on disconnect
+
+	// 1) Cleanup on disconnect
 	defer func() {
 		conn.Close()
 		for user, list := range connections {
@@ -57,10 +42,25 @@ func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		}
 	}()
 
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := conn.WriteJSON(map[string]string{"type": "ping"}); err != nil {
+				log.Println("json-ping failed, closing:", err)
+				conn.Close()
+				return
+			}
+		}
+	}()
+
+	// 3) Start ping loop in a separate goroutine
+
+	// 4) Main read loop
 	for {
 		_, rawMsg, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("read:", err)
+			log.Println("read error:", err)
 			break
 		}
 
@@ -75,8 +75,19 @@ func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 		switch t {
 
 		// ─── AUTH ACTIONS ─────────────────────────────────────────────────────────
+		case "ping":
+			// client is checking server; echo back
+			conn.WriteJSON(map[string]string{"type": "pong"})
+			continue
+		case "pong":
+			// client responded to our ping; could update lastSeen here
+			continue
+		}
+
+		switch t {
+
 		case "action":
-			var req ActionRequest
+			var req types.ActionRequest
 			if err := json.Unmarshal(rawMsg, &req); err != nil {
 				conn.WriteJSON(map[string]string{"type": "error", "msg": "bad action"})
 				continue
@@ -88,6 +99,7 @@ func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 				} else {
 					conn.WriteJSON(map[string]string{"type": "register", "status": "ok"})
 				}
+
 			case "login":
 				// 1) authenticate + get token
 				token, err := auth.Login(db, req.Username, req.Password)
@@ -102,7 +114,7 @@ func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 					"token":  token,
 				})
 				// 3) register this connection
-				ci := ConnectionInfo{
+				ci := types.ConnectionInfo{
 					Conn:        conn,
 					IP:          conn.RemoteAddr().String(),
 					ConnectedAt: time.Now(),
@@ -111,7 +123,7 @@ func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 				// 4) replay undelivered messages
 				undelivered, err := store.LoadUndelivered(db, req.Username)
 				if err != nil {
-					log.Println("LoadUndelivered:", err)
+					log.Println("LoadUndelivered error:", err)
 				}
 				for _, row := range undelivered {
 					conn.WriteJSON(types.IncomingMessage{
@@ -122,50 +134,49 @@ func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 						Content:     row.Content,
 					})
 				}
+
 			default:
 				conn.WriteJSON(map[string]string{"type": "error", "msg": "unknown action"})
 			}
 
 		// ─── CHAT MESSAGES ────────────────────────────────────────────────────────
 		case "message":
-			// 1) parse WS payload
 			var im types.IncomingMessage
 			if err := json.Unmarshal(rawMsg, &im); err != nil {
 				conn.WriteJSON(map[string]string{"type": "error", "msg": "bad message"})
 				continue
 			}
-			// 2) verify JWT
+			// verify JWT
 			user, err := auth.ParseToken(im.Token)
 			if err != nil {
 				conn.WriteJSON(map[string]string{"type": "error", "msg": "invalid token"})
 				continue
 			}
-			// 3) ensure message.From matches authenticated user
 			if im.From != user {
 				conn.WriteJSON(map[string]string{"type": "error", "msg": "sender mismatch"})
 				continue
 			}
 			im.From = user
 
-			// 4) persist
+			// persist
 			msgID, err := store.SaveMessage(db, im.From, im.To, im.ContentType, im.Content)
 			if err != nil {
-				log.Println("SaveMessage:", err)
+				log.Println("SaveMessage error:", err)
 			}
 
-			// 5) deliver to all online devices
+			// deliver to all online devices
 			for _, ci := range connections[im.To] {
 				ci.Conn.WriteJSON(im)
 			}
 
-			// 6) mark delivered
+			// mark delivered
 			if err := store.MarkDelivered(db, msgID); err != nil {
-				log.Println("MarkDelivered:", err)
+				log.Println("MarkDelivered error:", err)
 			}
 
 		// ─── HISTORY REQUEST ───────────────────────────────────────────────────────
 		case "history":
-			var req HistoryRequest
+			var req types.HistoryRequest
 			if err := json.Unmarshal(rawMsg, &req); err != nil {
 				conn.WriteJSON(map[string]string{"type": "error", "msg": "bad history request"})
 				continue
@@ -179,7 +190,7 @@ func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 			// load last N messages
 			rows, err := store.LoadHistory(db, user, req.ChatWith, req.Limit)
 			if err != nil {
-				log.Println("LoadHistory:", err)
+				log.Println("LoadHistory error:", err)
 				continue
 			}
 			// send each back

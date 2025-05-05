@@ -36,6 +36,10 @@ func main() {
 		chat.Handler(w, r, database)
 	})
 
+	http.HandleFunc("/upload", chat.UploadHandler(database))
+	fs := http.FileServer(http.Dir("./uploads"))
+	http.Handle("/uploads/", http.StripPrefix("/uploads/", fs))
+
 	addr := ":8081"
 	log.Println("Listening on", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
