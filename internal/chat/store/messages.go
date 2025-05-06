@@ -138,7 +138,6 @@ func LoadHistory(db *sql.DB, user, withUser string, limit int) ([]types.MessageR
 func LoadChats(db *sql.DB, me string) ([]types.Chat, error) {
 	const q = `
 	  SELECT
-		-- figure out the *other* participant
 		CASE
 		  WHEN user1 = ? THEN user2
 		  ELSE user1
