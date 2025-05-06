@@ -203,6 +203,32 @@ func Handler(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 					Content:     row.Content,
 				})
 			}
+		case "listChats":
+			//SEND A LIST OF USER'S CHATS
+			// 1) Unmarshal the request
+			var req types.ChatsRequest
+			if err := json.Unmarshal(rawMsg, &req); err != nil {
+				conn.WriteJSON(map[string]string{"type": "error", "msg": "bad chats request"})
+				continue
+			}
+			// 2) Authenticate
+			me, err := auth.ParseToken(req.Token)
+			if err != nil {
+				conn.WriteJSON(map[string]string{"type": "error", "msg": "invalid token"})
+				continue
+			}
+			// 3) Load from DB
+			chats, err := store.LoadChats(db, me)
+			if err != nil {
+				log.Println("LoadChats error:", err)
+				conn.WriteJSON(map[string]string{"type": "error", "msg": "internal error"})
+				continue
+			}
+			// 4) Send one single response containing all chats
+			conn.WriteJSON(map[string]interface{}{
+				"type":  "chatsList",
+				"chats": chats,
+			})
 
 		// ─── UNKNOWN TYPE ─────────────────────────────────────────────────────────
 		default:

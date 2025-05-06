@@ -43,3 +43,14 @@ type ConnectionInfo struct {
 	IP          string          // conn.RemoteAddr().String()
 	ConnectedAt time.Time       // when this connection was opened
 }
+
+type ChatsRequest struct {
+	Type  string `json:"type"`
+	Token string `json:"token"`
+}
+
+type Chat struct {
+	With            string    `json:"with"`            // the *other* user
+	LastMessage     string    `json:"lastMessage"`     // the snippet
+	LastMessageTime time.Time `json:"lastMessageTime"` // sortable timestamp
+}

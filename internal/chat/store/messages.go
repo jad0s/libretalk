@@ -135,26 +135,36 @@ func LoadHistory(db *sql.DB, user, withUser string, limit int) ([]types.MessageR
 	return msgs, nil
 }
 
-
-func LoadChats(db *sql.DB, user string) (types.Chat, error){
-	rows, err := db.Query( //TODO: create db table "messages" and fill in names below
-		"SELECT with
-		from chats						
-		where user1 = ? or user2 = ?",
-		user
-	)
-	if err != nil{
-		return nil, fmt.Errorf("Load chats: %w", err)
+func LoadChats(db *sql.DB, me string) ([]types.Chat, error) {
+	const q = `
+	  SELECT
+		-- figure out the *other* participant
+		CASE
+		  WHEN user1 = ? THEN user2
+		  ELSE user1
+		END AS peer,
+		last_message,
+		updated_at
+	  FROM conversations
+	  WHERE user1 = ? OR user2 = ?
+	  ORDER BY updated_at DESC
+	`
+	rows, err := db.Query(q, me, me, me)
+	if err != nil {
+		return nil, fmt.Errorf("LoadChats query: %w", err)
 	}
 	defer rows.Close()
-	var chats []types.Chat
-	for rows.Next(){
-		var c types.Chat
-		if err := rows.Scan(
-			&c.with
-		); err != nil{
-			return nil, fmt.Errorf("scan chat row: %w", err)
-		}
-	}
 
+	var chats []types.Chat
+	for rows.Next() {
+		var c types.Chat
+		if err := rows.Scan(&c.With, &c.LastMessage, &c.LastMessageTime); err != nil {
+			return nil, fmt.Errorf("LoadChats scan: %w", err)
+		}
+		chats = append(chats, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("LoadChats rows error: %w", err)
+	}
+	return chats, nil
 }
