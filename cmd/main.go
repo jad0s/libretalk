@@ -22,7 +22,7 @@ func main() {
 	}
 	fmt.Println()
 	//database connection --TODO - change db IP and PORT to silent input like db password for prod
-	dsn := fmt.Sprintf("server:%s@tcp(chatdb.s:3306)/selfchat",
+	dsn := fmt.Sprintf("server:%s@tcp(192.168.0.202:3306)/selfchat",
 		strings.TrimSpace(string(pw)),
 	)
 	database, err := db.Connect(dsn)

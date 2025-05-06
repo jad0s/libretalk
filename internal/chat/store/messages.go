@@ -134,3 +134,27 @@ func LoadHistory(db *sql.DB, user, withUser string, limit int) ([]types.MessageR
 
 	return msgs, nil
 }
+
+
+func LoadChats(db *sql.DB, user string) (types.Chat, error){
+	rows, err := db.Query( //TODO: create db table "messages" and fill in names below
+		"SELECT with
+		from chats						
+		where user1 = ? or user2 = ?",
+		user
+	)
+	if err != nil{
+		return nil, fmt.Errorf("Load chats: %w", err)
+	}
+	defer rows.Close()
+	var chats []types.Chat
+	for rows.Next(){
+		var c types.Chat
+		if err := rows.Scan(
+			&c.with
+		); err != nil{
+			return nil, fmt.Errorf("scan chat row: %w", err)
+		}
+	}
+
+}
