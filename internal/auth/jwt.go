@@ -9,9 +9,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var jwtSecret, _ = base64.StdEncoding.DecodeString("12SNtOQ9LS3nSAHAZl0EQaciRDCsLDCFCEzeIJvx5ss=")
-
-//var jwtSecret = []byte("12SNtOQ9LS3nSAHAZl0EQaciRDCsLDCFCEzeIJvx5ss=") // TODO: load from env
+var jwtSecret, _ = base64.StdEncoding.DecodeString("12SNtOQ9LS3nSAHAZl0EQaciRDCsLDCFCEzeIJvx5ss=") // TODO load from .env
 
 // GenerateToken returns a JWT signed with HS256, expiring in 24h.
 func GenerateToken(username string) (string, error) {
