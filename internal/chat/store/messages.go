@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"libretalk/internal/types"
+	"log"
 	"strings"
 	"time"
 )
@@ -18,7 +19,19 @@ func SaveMessage(db *sql.DB, sender, recipient, contentType, content string) (in
 	if err != nil {
 		return 0, fmt.Errorf("save message: %w", err)
 	}
-	return res.LastInsertId()
+	msgID, _ := res.LastInsertId()
+	user1, user2 = sortTwoUsers(sender, recipient)
+	if _, err := db.Exec(`
+		INSERT INTO conversations (user1, user2, last_message, updated_at)
+        VALUES (?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE
+          last_message = VALUES(last_message),
+          updated_at   = VALUES(updated_at)
+    `, user1, user2, content); err != nil {
+		// Log the error but don’t fail the whole send
+		log.Println("upsert conversation:", err)
+	}
+	return msgID, nil
 }
 
 // MarkDelivered flips the delivered flag and stamps delivered_at.
@@ -166,4 +179,11 @@ func LoadChats(db *sql.DB, me string) ([]types.Chat, error) {
 		return nil, fmt.Errorf("LoadChats rows error: %w", err)
 	}
 	return chats, nil
+}
+
+func sortTwoUsers(a, b string) (string, string) {
+	if a < b {
+		return a, b
+	}
+	return b, a
 }
