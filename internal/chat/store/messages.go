@@ -20,7 +20,7 @@ func SaveMessage(db *sql.DB, sender, recipient, contentType, content string) (in
 		return 0, fmt.Errorf("save message: %w", err)
 	}
 	msgID, _ := res.LastInsertId()
-	user1, user2 = sortTwoUsers(sender, recipient)
+	user1, user2 := sortTwoUsers(sender, recipient)
 	if _, err := db.Exec(`
 		INSERT INTO conversations (user1, user2, last_message, updated_at)
         VALUES (?, ?, ?, NOW())
