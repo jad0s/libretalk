@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"libretalk/internal/auth"
-	"libretalk/internal/chat/store"
-	"libretalk/internal/types"
+	"github.com/jad0s/libretalk/internal/auth"
+	"github.com/jad0s/libretalk/internal/chat/store"
+	"github.com/jad0s/libretalk/internal/types"
 
 	"github.com/gorilla/websocket"
 )

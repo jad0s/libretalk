@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"libretalk/internal/auth"
+	"github.com/jad0s/libretalk/internal/auth"
 	"net/http"
 	"os"
 	"path/filepath"

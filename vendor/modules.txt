@@ -26,3 +26,7 @@ golang.org/x/sys/windows
 # golang.org/x/term v0.31.0
 ## explicit; go 1.23.0
 golang.org/x/term
+# github.com/jad0s/libretalk/internal/auth => ./internal/auth
+# github.com/jad0s/libretalk/internal/chat => ./internal/chat
+# github.com/jad0s/libretalk/internal/db => ./internal/db
+# github.com/jad0s/libretalk/internal/types => ./internal/types

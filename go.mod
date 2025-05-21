@@ -1,4 +1,4 @@
-module libretalk
+module github.com/jad0s/libretalk
 
 go 1.24.1
 
@@ -14,4 +14,11 @@ require (
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
+)
+
+replace (
+	github.com/jad0s/libretalk/internal/auth => ./internal/auth
+	github.com/jad0s/libretalk/internal/chat => ./internal/chat
+	github.com/jad0s/libretalk/internal/db => ./internal/db
+	github.com/jad0s/libretalk/internal/types => ./internal/types
 )

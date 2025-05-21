@@ -3,10 +3,11 @@ package store
 import (
 	"database/sql"
 	"fmt"
-	"libretalk/internal/types"
 	"log"
 	"strings"
 	"time"
+
+	"github.com/jad0s/libretalk/internal/types"
 )
 
 // SaveMessage writes a new message to db and returns its auto-increment ID.
